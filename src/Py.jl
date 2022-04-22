@@ -114,11 +114,7 @@ be a significant source of slow-down in code which uses a lot of Python objects.
 the relatively slow finalizer on `x`.
 """
 function pydel!(x::Py)
-    ptr = getptr(x)
-    if ptr != C.PyNULL
-        C.Py_DecRef(ptr)
-        setptr!(x, C.PyNULL)
-    end
+    pynew!(x)
     push!(PYNULL_CACHE, x)
     return
 end
@@ -155,6 +151,40 @@ Py(x::Date) = pydate(x)
 Py(x::Time) = pytime(x)
 Py(x::DateTime) = pydatetime(x)
 Py(x) = ispy(x) ? throw(MethodError(Py, (x,))) : pyjl(x)
+
+function pynew!(ans::Py)
+    ptr = getptr(ans)
+    if ptr != C.PyNULL
+        C.Py_DecRef(ptr)
+        setptr!(ans, C.PyNULL)
+    end
+    return ans
+end
+
+function Py!(ans::Py, x)
+    if ispy(x)
+        pynew!(ans)
+        setptr!(ans, incref(getptr(x)))
+    else
+        # Now here is a neat hack!
+        # We detect at run-time whether we think Py(x) is returning a brand-new object or
+        # not, so that we can pydel!(x) the result after copying it. First we record the top
+        # item from PYNULL_CACHE. If Py(x) returns a new object, it will probably be this.
+        # Then we test if Py(x) is this top object, and if so, it is new, because it wasn't
+        # being used before because it was in PYNULL_CACHE. This doesn't actually guarantee
+        # that Py(x) isn't referenced somewhere else, but it would be a strange constructor
+        # if it were.
+        # TODO: Have a safe mode that turns this (and all the PYNULL_CACHE stuff) off.
+        t = pynew()
+        pydel!(t)
+        y = Py(x)::Py
+        Py!(ans, y)
+        if y === t
+            pydel!(y)
+        end
+    end
+    return ans
+end
 
 Base.string(x::Py) = pyisnull(x) ? "<py NULL>" : pystr(String, x)
 Base.print(io::IO, x::Py) = print(io, string(x))
