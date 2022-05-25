@@ -161,6 +161,8 @@ module Utils
     size_to_fstrides(elsz::Integer, sz::Tuple{Vararg{Integer}}) =
         isempty(sz) ? () : (elsz, size_to_fstrides(elsz * sz[1], sz[2:end])...)
 
+    size_to_fstrides(elsz::Integer, sz::Vararg{Integer}) = size_to_fstrides(elsz, sz)
+
     size_to_cstrides(elsz::Integer, sz::Tuple{Vararg{Integer}}) =
         isempty(sz) ? () : (size_to_cstrides(elsz * sz[end], sz[1:end-1])..., elsz)
 
